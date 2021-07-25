@@ -4,8 +4,6 @@
 #include <gtk/gtk.h>
 #include <sys/utsname.h>
 
-#include <cstring>
-
 #define WINDOW_TO_FRONT_PLUGIN(obj)                                     \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), window_to_front_plugin_get_type(), \
                               WindowToFrontPlugin))
@@ -13,6 +11,8 @@
 struct _WindowToFrontPlugin
 {
   GObject parent_instance;
+
+  FlPluginRegistrar *registrar;
 };
 
 G_DEFINE_TYPE(WindowToFrontPlugin, window_to_front_plugin, g_object_get_type())
@@ -26,13 +26,16 @@ static void window_to_front_plugin_handle_method_call(
 
   const gchar *method = fl_method_call_get_name(method_call);
 
-  if (strcmp(method, "getPlatformVersion") == 0)
+  if (strcmp(method, "activate") == 0)
   {
-    struct utsname uname_data = {};
-    uname(&uname_data);
-    g_autofree gchar *version = g_strdup_printf("Linux %s", uname_data.version);
-    g_autoptr(FlValue) result = fl_value_new_string(version);
-    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+    FlView *view = fl_plugin_registrar_get_view(self->registrar);
+    if (view != nullptr)
+    {
+      GtkWindow *window = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+      gtk_window_present(window);
+    }
+
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
   }
   else
   {
@@ -65,6 +68,8 @@ void window_to_front_plugin_register_with_registrar(FlPluginRegistrar *registrar
 {
   WindowToFrontPlugin *plugin = WINDOW_TO_FRONT_PLUGIN(
       g_object_new(window_to_front_plugin_get_type(), nullptr));
+
+  plugin->registrar = FL_PLUGIN_REGISTRAR(g_object_ref(registrar));
 
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) channel =
